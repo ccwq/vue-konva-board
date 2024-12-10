@@ -15,9 +15,11 @@
   "description": "",
   "devDependencies": {
     "@vitejs/plugin-legacy": "^5.2.0",
+    "@vitejs/plugin-vue": "^4.5.2",
     "vite": "^5.0.7"
   },
   "dependencies": {
-    "konva": "^9.3.16"
+    "konva": "^9.3.16",
+    "vue": "^3.3.11"
   }
 }
