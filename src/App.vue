@@ -24,6 +24,14 @@
         class="control-item"
         title="Stroke Width"
       >
+      
+      <button 
+        @click="deleteSelected" 
+        class="control-item delete-btn"
+        :disabled="!hasSelectedShape"
+      >
+        Delete
+      </button>
     </div>
     <div id="container" ref="container"></div>
   </div>
@@ -31,13 +39,14 @@
 
 <script setup>
 
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import Konva from 'konva'
 
 const container = ref(null)
 const selectedShape = ref('rectangle')
 const strokeColor = ref('#000000')
 const strokeWidth = ref(2)
+const hasSelected = ref(false)
 
 let stage = null
 let layer = null
@@ -89,6 +98,23 @@ const init = ()=>{
   stage.on('click tap', (e) => {
     if (e.target === stage) {
       tr.nodes([])
+      hasSelected.value = false
+      layer.draw()
+    }
+  })
+
+  // Add keyboard event listener for delete
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      deleteSelected()
+    }
+  })
+
+  // Add click handler for shape selection
+  stage.on('click tap', (e) => {
+    if (e.target !== stage) {
+      tr.nodes([e.target])
+      hasSelected.value = true
       layer.draw()
     }
   })
@@ -188,6 +214,7 @@ const handleMouseDown = (e) => {
         strokeWidth: strokeWidth.value,
         draggable: true,
       })
+    
       break
   }
 
@@ -206,6 +233,7 @@ const handleMouseMove = () => {
 
   const pos = stage.getPointerPosition()
 
+  hasSelected.value = true
   switch (selectedShape.value) {
     case 'rectangle': {
       let width = pos.x - startPos.x
@@ -259,7 +287,9 @@ const handleMouseUp = () => {
     currentShape = null
   }else if (selectedShape.value === 'freedraw') {
     isDrawing = false
+    tr.nodes([currentShape])
     currentShape = null
+    layer.draw()
   }else {
     isDrawing = false
     if (currentShape) {
@@ -302,6 +332,22 @@ watch([strokeColor, strokeWidth], () => {
     layer.draw()
   }
 })
+
+// Add computed property for selected shape status
+const hasSelectedShape = computed(() => {
+  return hasSelected.value
+})
+
+// Add delete function
+const deleteSelected = () => {
+  const selectedNode = tr.nodes()[0]
+  if (selectedNode) {
+    selectedNode.destroy()
+    tr.nodes([])
+    hasSelected.value = false
+    layer.draw()
+  }
+}
 </script>
 
 <style>
@@ -323,6 +369,24 @@ watch([strokeColor, strokeWidth], () => {
   padding: 5px;
   border: 1px solid #ccc;
   border-radius: 4px;
+}
+
+.delete-btn {
+  background-color: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 15px;
+  cursor: pointer;
+}
+
+.delete-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background-color: #ff0000;
 }
 
 #container {
