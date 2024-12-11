@@ -4,7 +4,7 @@
       <select v-model="selectedShape" class="control-item">
         <option value="rectangle">Rectangle</option>
         <option value="circle">Circle</option>
-        <option value="polygon">Polygon</option>
+        <!-- <option value="polygon">Polygon</option> -->
         <option value="arrow">Arrow</option>
         <option value="freedraw">Free Draw</option>
       </select>
@@ -15,7 +15,6 @@
         class="control-item"
         title="Stroke Color"
       >
-
       <input
         type="number"
         v-model="strokeWidth"
@@ -32,6 +31,15 @@
       >
         Delete
       </button>
+      <button @click="selectBackgroundImage" class="control-item">Set Background</button>
+      <button @click="saveStage" class="control-item">Save as PNG</button>
+      <input
+        type="file"
+        ref="fileInput"
+        @change="handleImageUpload"
+        accept="image/*"
+        style="display: none"
+      />
     </div>
     <div id="container" ref="container"></div>
   </div>
@@ -43,6 +51,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import Konva from 'konva'
 
 const container = ref(null)
+const fileInput = ref(null)
 const selectedShape = ref('rectangle')
 const strokeColor = ref('#000000')
 const strokeWidth = ref(2)
@@ -54,6 +63,7 @@ let isDrawing = false
 let currentShape = null
 let startPos = null
 let tr = null
+let backgroundImage = null
 
 // 初始化舞台,变形,图层
 const init = ()=>{
@@ -115,6 +125,11 @@ const init = ()=>{
     if (e.target !== stage) {
       tr.nodes([e.target])
       hasSelected.value = true
+      layer.draw()
+    }else{
+      currentShape = null
+      tr.nodes([])
+      hasSelected.value = false
       layer.draw()
     }
   })
@@ -180,7 +195,14 @@ const createPolygon = (x, y) => {
   })
 }
 
-// 鼠标按下时的逻辑
+/**
+ * 处理鼠标按下事件
+ * 根据选中的图形类型创建相应的图形
+ * @param {MouseEvent} e - 鼠标事件对象。
+ * @example
+ * // 使用示例
+ * handleMouseDown(event);
+ */
 const handleMouseDown = (e) => {
   if (e.target !== stage) return
 
@@ -200,7 +222,7 @@ const handleMouseDown = (e) => {
       break
     case 'polygon':
       if (!currentShape) {
-        polygonPoints = [pos.x, pos.y]
+        // polygonPoints = [pos.x, pos.y]
         currentShape = createPolygon(pos.x, pos.y)
       } else {
         polygonPoints.push(pos.x, pos.y)
@@ -230,9 +252,7 @@ const handleMouseDown = (e) => {
 
 const handleMouseMove = () => {
   if (!isDrawing || !currentShape) return
-
   const pos = stage.getPointerPosition()
-
   hasSelected.value = true
   switch (selectedShape.value) {
     case 'rectangle': {
@@ -274,8 +294,6 @@ const handleMouseMove = () => {
       break
     }
   }
-
-
   layer.draw()
 }
 
@@ -348,6 +366,56 @@ const deleteSelected = () => {
     layer.draw()
   }
 }
+
+// 选择背景图片
+const selectBackgroundImage = () => {
+  fileInput.value.click()
+}
+
+// 处理图片上传
+const handleImageUpload = (e) => {
+  const file = e.target.files[0]
+  if (file) {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const img = new Image()
+      img.onload = () => {
+        // Remove existing background if any
+        if (backgroundImage) {
+          backgroundImage.destroy()
+        }
+        
+        // Create new background image
+        backgroundImage = new Konva.Image({
+          x: 0,
+          y: 0,
+          image: img,
+          width: stage.width(),
+          height: stage.height(),
+          listening: false  // 禁用交互
+        })
+        
+        // Add to bottom of layer
+        layer.add(backgroundImage)
+        backgroundImage.moveToBottom()
+        layer.draw()
+      }
+      img.src = event.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
+// 保存舞台为PNG
+const saveStage = () => {
+  const dataURL = stage.toDataURL({ pixelRatio: 2 })
+  const link = document.createElement('a')
+  link.download = 'stage.png'
+  link.href = dataURL
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 </script>
 
 <style>
@@ -366,9 +434,16 @@ const deleteSelected = () => {
 }
 
 .control-item {
-  padding: 5px;
+  margin: 0 5px;
+  padding: 5px 10px;
   border: 1px solid #ccc;
   border-radius: 4px;
+  background: white;
+  cursor: pointer;
+}
+
+.control-item:hover {
+  background: #f0f0f0;
 }
 
 .delete-btn {
