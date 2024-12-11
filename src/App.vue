@@ -27,7 +27,7 @@
       <button 
         @click="deleteSelected" 
         class="control-item delete-btn"
-        :disabled="!hasSelectedShape"
+        :disabled="!hasSelected"
       >
         Delete
       </button>
@@ -49,6 +49,7 @@
 
 import { ref, onMounted, watch, computed } from 'vue'
 import Konva from 'konva'
+import { ClickSingle } from './utils/utils';
 
 const container = ref(null)
 const fileInput = ref(null)
@@ -57,20 +58,29 @@ const strokeColor = ref('#000000')
 const strokeWidth = ref(2)
 const hasSelected = ref(false)
 
+
 let stage = null
 let layer = null
 let isDrawing = false
+
+
+/**
+ * 当前正在编辑或者绘制的形状
+ * @type {Konva.Shape|null}
+ */
 let currentShape = null
 let startPos = null
 let tr = null
 let backgroundImage = null
 
+const clickSignle = new ClickSingle;
+
 // 初始化舞台,变形,图层
 const init = ()=>{
   stage = new Konva.Stage({
     container: container.value,
-    width: window.innerWidth,
-    height: window.innerHeight - 50, // Account for controls height
+    width: 800,  // 设置一个默认宽度
+    height: 600, // 设置一个默认高度
   })
 
   layer = new Konva.Layer()
@@ -105,13 +115,32 @@ const init = ()=>{
   stage.on('mousedown touchstart', handleMouseDown)
   stage.on('mousemove touchmove', handleMouseMove)
   stage.on('mouseup touchend', handleMouseUp)
-  stage.on('click tap', (e) => {
-    if (e.target === stage) {
-      tr.nodes([])
-      hasSelected.value = false
-      layer.draw()
-    }
-  })
+  // stage.on('click tap', (e) => {
+  //   if (e.target === stage) {
+  //     tr.nodes([])
+  //     hasSelected.value = false
+  //     layer.draw()
+  //   }
+  // })
+
+  //   // Add click handler for shape selection
+  // stage.on('click tap', (e) => {
+  //   // log e target
+  //   console.log(e.target);
+  //   if (e.target !== stage) {
+  //     tr.nodes([e.target])
+  //     hasSelected.value = true
+  //     layer.draw()
+  //   }else{
+  //     currentShape = null
+  //     tr.nodes([])
+  //     hasSelected.value = false
+  //     layer.draw()
+
+  //     console.log("click");
+  //     // e.stopPropagation()
+  //   }
+  // })
 
   // Add keyboard event listener for delete
   window.addEventListener('keydown', (e) => {
@@ -120,19 +149,7 @@ const init = ()=>{
     }
   })
 
-  // Add click handler for shape selection
-  stage.on('click tap', (e) => {
-    if (e.target !== stage) {
-      tr.nodes([e.target])
-      hasSelected.value = true
-      layer.draw()
-    }else{
-      currentShape = null
-      tr.nodes([])
-      hasSelected.value = false
-      layer.draw()
-    }
-  })
+
 }
 
 // 初始化Konva舞台和图层
@@ -204,6 +221,9 @@ const createPolygon = (x, y) => {
  * handleMouseDown(event);
  */
 const handleMouseDown = (e) => {
+
+  clickSignle.handlerMousedown(e.evt);
+  
   if (e.target !== stage) return
 
   isDrawing = true
@@ -241,19 +261,25 @@ const handleMouseDown = (e) => {
   }
 
   if (currentShape) {
-    currentShape.on('click tap', function() {
-      tr.nodes([this])
-      layer.draw()
-    })
-    layer.add(currentShape)
-    layer.draw()
+    // currentShape.on('click tap', function() {
+    //   tr.nodes([this])
+    //   layer.draw()
+    // })
+
+    // layer.add(currentShape)
+    // layer.draw()
   }
 }
 
 const handleMouseMove = () => {
   if (!isDrawing || !currentShape) return
   const pos = stage.getPointerPosition()
-  hasSelected.value = true
+
+  if(currentShape && !currentShape.parent){
+    layer.add(currentShape)
+    layer.draw()
+    hasSelected.value = true
+  }
   switch (selectedShape.value) {
     case 'rectangle': {
       let width = pos.x - startPos.x
@@ -297,7 +323,31 @@ const handleMouseMove = () => {
   layer.draw()
 }
 
-const handleMouseUp = () => {
+const handleMouseUp = (e) => {
+  clickSignle.handlerMouseup(e.evt);
+  // 是点击
+  if(clickSignle.value) {
+
+    // 取消选择元素
+    if(e.target === stage) {
+      currentShape = null
+      tr.nodes([])
+      hasSelected.value = true
+      layer.draw()
+      hasSelected.value = false
+    }
+    
+    // 选择元素
+    else{
+      currentShape = e.target;
+      tr.nodes([currentShape])
+      hasSelected.value = true
+      layer.draw()
+    }
+    console.log("是单击")
+  }
+
+
   if (!isDrawing) return
 
   if(selectedShape.value === 'polygon') {
@@ -351,11 +401,6 @@ watch([strokeColor, strokeWidth], () => {
   }
 })
 
-// Add computed property for selected shape status
-const hasSelectedShape = computed(() => {
-  return hasSelected.value
-})
-
 // Add delete function
 const deleteSelected = () => {
   const selectedNode = tr.nodes()[0]
@@ -384,14 +429,18 @@ const handleImageUpload = (e) => {
         if (backgroundImage) {
           backgroundImage.destroy()
         }
+
+        // 调整舞台大小以匹配图像尺寸
+        stage.width(img.width)
+        stage.height(img.height)
         
         // Create new background image
         backgroundImage = new Konva.Image({
           x: 0,
           y: 0,
           image: img,
-          width: stage.width(),
-          height: stage.height(),
+          width: img.width,
+          height: img.height,
           listening: false  // 禁用交互
         })
         
