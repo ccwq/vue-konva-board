@@ -2,11 +2,11 @@
   <div class="app-container">
     <div class="controls">
       <select v-model="selectedShape" class="control-item">
-        <option value="rectangle">Rectangle</option>
-        <option value="circle">Circle</option>
+        <option value="rectangle">矩形</option>
+        <option value="circle">圆</option>
         <!-- <option value="polygon">Polygon</option> -->
-        <option value="arrow">Arrow</option>
-        <option value="freedraw">Free Draw</option>
+        <option value="arrow">箭头</option>
+        <option value="freedraw">自由绘制</option>
       </select>
 
       <input
@@ -29,10 +29,10 @@
         class="control-item delete-btn"
         :disabled="!hasSelected"
       >
-        Delete
+        删除
       </button>
-      <button @click="selectBackgroundImage" class="control-item">Set Background</button>
-      <button @click="saveStage" class="control-item">Save as PNG</button>
+      <button @click="selectBackgroundImage" class="control-item">加载背景</button>
+      <button @click="saveStage" class="control-item">保存</button>
       <input
         type="file"
         ref="fileInput"
@@ -47,7 +47,7 @@
 
 <script setup>
 
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import Konva from 'konva'
 import { ClickSingle } from './utils/utils';
 
@@ -74,6 +74,23 @@ let tr = null
 let backgroundImage = null
 
 const clickSignle = new ClickSingle;
+
+// 处理键盘删除事件
+const handleKeyDown = (e) => {
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    deleteSelected()
+  }
+}
+
+// 清理事件监听器
+const cleanup = () => {
+  if (stage) {
+    stage.off('mousedown touchstart')
+    stage.off('mousemove touchmove')
+    stage.off('mouseup touchend')
+  }
+  window.removeEventListener('keydown', handleKeyDown)
+}
 
 // 初始化舞台,变形,图层
 const init = ()=>{
@@ -115,46 +132,19 @@ const init = ()=>{
   stage.on('mousedown touchstart', handleMouseDown)
   stage.on('mousemove touchmove', handleMouseMove)
   stage.on('mouseup touchend', handleMouseUp)
-  // stage.on('click tap', (e) => {
-  //   if (e.target === stage) {
-  //     tr.nodes([])
-  //     hasSelected.value = false
-  //     layer.draw()
-  //   }
-  // })
-
-  //   // Add click handler for shape selection
-  // stage.on('click tap', (e) => {
-  //   // log e target
-  //   console.log(e.target);
-  //   if (e.target !== stage) {
-  //     tr.nodes([e.target])
-  //     hasSelected.value = true
-  //     layer.draw()
-  //   }else{
-  //     currentShape = null
-  //     tr.nodes([])
-  //     hasSelected.value = false
-  //     layer.draw()
-
-  //     console.log("click");
-  //     // e.stopPropagation()
-  //   }
-  // })
-
+ 
   // Add keyboard event listener for delete
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      deleteSelected()
-    }
-  })
-
-
+  window.addEventListener('keydown', handleKeyDown)
 }
 
 // 初始化Konva舞台和图层
 onMounted(() => {
   init()
+})
+
+// 清理事件监听器
+onUnmounted(() => {
+  cleanup()
 })
 
 // 创建矩形
@@ -258,16 +248,6 @@ const handleMouseDown = (e) => {
       })
     
       break
-  }
-
-  if (currentShape) {
-    // currentShape.on('click tap', function() {
-    //   tr.nodes([this])
-    //   layer.draw()
-    // })
-
-    // layer.add(currentShape)
-    // layer.draw()
   }
 }
 
@@ -457,6 +437,10 @@ const handleImageUpload = (e) => {
 
 // 保存舞台为PNG
 const saveStage = () => {
+  currentShape = null
+  hasSelected.value = false
+  tr.nodes([])
+  layer.draw()
   const dataURL = stage.toDataURL({ pixelRatio: 2 })
   const link = document.createElement('a')
   link.download = 'stage.png'
