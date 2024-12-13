@@ -33,6 +33,20 @@
       </button>
       <button @click="selectBackgroundImage" class="control-item">加载背景</button>
       <button @click="saveStage" class="control-item">保存</button>
+      <button 
+        @click="undo" 
+        class="control-item"
+        :disabled="!canUndo"
+      >
+        撤销
+      </button>
+      <button 
+        @click="redo" 
+        class="control-item"
+        :disabled="!canRedo"
+      >
+        重做
+      </button>
       <input
         type="file"
         ref="fileInput"
@@ -49,6 +63,7 @@
 
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import Konva from 'konva'
+import historyManager from './utils/history.js'
 import { ClickSingle } from './utils/utils';
 
 const container = ref(null)
@@ -58,11 +73,14 @@ const strokeColor = ref('#000000')
 const strokeWidth = ref(2)
 const hasSelected = ref(false)
 
+// 用来更新computed
+const undoRedoSeed = ref(0)
+const canUndo = computed(() => (undoRedoSeed.value, historyManager.canUndo()))
+const canRedo = computed(() => (undoRedoSeed.value, historyManager.canRedo()))
 
 let stage = null
 let layer = null
 let isDrawing = false
-
 
 /**
  * 当前正在编辑或者绘制的形状
@@ -118,6 +136,41 @@ const init = ()=>{
     },
   })
 
+  tr.on('transformstart', (e) => {
+    const shape = e.target
+    // 保存变换开始前的状态
+    shape._oldAttrs = {
+      x: shape.x(),
+      y: shape.y(),
+      width: shape.width(),
+      height: shape.height(),
+      rotation: shape.rotation(),
+      scaleX: shape.scaleX(),
+      scaleY: shape.scaleY(),
+    }
+  })
+
+  tr.on('transformend', (e) => {
+    const shape = e.target
+    // 记录变换操作
+    historyManager.addToHistory({
+      type: 'modify',
+      shape: shape,
+      oldAttrs: shape._oldAttrs,
+      newAttrs: {
+        x: shape.x(),
+        y: shape.y(),
+        width: shape.width(),
+        height: shape.height(),
+        rotation: shape.rotation(),
+        scaleX: shape.scaleX(),
+        scaleY: shape.scaleY(),
+      }
+    })
+    undoRedoSeed.value++
+    delete shape._oldAttrs
+  })
+
   tr.on('transformend', () => {
     const shape = tr.nodes()[0]
     if (shape) {
@@ -146,6 +199,44 @@ onMounted(() => {
 onUnmounted(() => {
   cleanup()
 })
+
+// 撤销操作
+const undo = () => {
+  const lastAction = historyManager.undo()
+  if (lastAction) {
+    if (lastAction.type === 'add') {
+      // 如果是添加操作，撤销时需要删除对应的图形
+      lastAction.shape.destroy()
+    } else if (lastAction.type === 'delete') {
+      // 如果是删除操作，撤销时需要重新添加图形
+      layer.add(lastAction.shape)
+    } else if (lastAction.type === 'modify') {
+      // 如果是修改操作，恢复到之前的状态
+      Object.assign(lastAction.shape, lastAction.oldAttrs)
+    }
+    layer.batchDraw()
+  }
+  undoRedoSeed.value++;
+}
+
+// 重做操作
+const redo = () => {
+  const action = historyManager.redo()
+  if (action) {
+    if (action.type === 'add') {
+      // 重做添加操作
+      layer.add(action.shape)
+    } else if (action.type === 'delete') {
+      // 重做删除操作
+      action.shape.destroy()
+    } else if (action.type === 'modify') {
+      // 重做修改操作
+      Object.assign(action.shape, action.newAttrs)
+    }
+    layer.batchDraw()
+  }
+  undoRedoSeed.value++
+}
 
 // 创建矩形
 const createRectangle = (x, y) => {
@@ -341,6 +432,12 @@ const handleMouseUp = (e) => {
   }else {
     isDrawing = false
     if (currentShape) {
+      // 记录添加新图形的操作
+      historyManager.addToHistory({
+        type: 'add',
+        shape: currentShape
+      })
+      undoRedoSeed.value++
       const isShapeTooSmall = () => {
         switch (selectedShape.value) {
           case 'rectangle':
@@ -385,6 +482,12 @@ watch([strokeColor, strokeWidth], () => {
 const deleteSelected = () => {
   const selectedNode = tr.nodes()[0]
   if (selectedNode) {
+    // 记录删除操作
+    historyManager.addToHistory({
+      type: 'delete',
+      shape: selectedNode
+    })
+    undoRedoSeed.value++
     selectedNode.destroy()
     tr.nodes([])
     hasSelected.value = false
